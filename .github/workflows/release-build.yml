@@ -1,4 +1,4 @@
-name: Release: Build & Publish (Pure Python)
+name: "Release: Build & Publish (Pure Python)"
 
 on:
   release:
