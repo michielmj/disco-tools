@@ -20,11 +20,12 @@ jobs:
       contents: read
 
     steps:
-      - name: 🧩 Check out release tag
+      - name: 🧩 Checkout source at the release tag (with tags)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name }}  # e.g., v0.1.0
+          fetch-depth: 0                             # full history
+          fetch-tags: true                           # ensure tags are present
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -40,6 +41,22 @@ jobs:
           rm -rf dist build *.egg-info **/*.egg-info
           python -m build --sdist --wheel
           python -m twine check dist/*
+
+      - name: 🔎 Inspect wheel METADATA
+        run: |
+          python - <<'PY'
+          import zipfile, pathlib
+          whls = sorted(pathlib.Path("dist").glob("*.whl"))
+          assert whls, "No wheels found in dist/"
+          with zipfile.ZipFile(whls[-1]) as z:
+              meta = [n for n in z.namelist() if n.endswith('.dist-info/METADATA')]
+              assert meta, "No METADATA in wheel"
+              data = z.read(meta[0]).decode()
+              print("--- METADATA header ---")
+              for k in ("Metadata-Version", "Name:", "Version:"):
+                  print(next((line for line in data.splitlines() if line.startswith(k)), f"{k} MISSING"))
+              print("-----------------------")
+          PY
 
       - name: 📋 List built artifacts
         run: ls -lh dist
