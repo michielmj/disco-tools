@@ -54,7 +54,6 @@ jobs:
         if: github.event_name == 'release' || steps.target.outputs.manual == 'pypi'
         uses: pypa/gh-action-pypi-publish@v1.10.3
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
 
       - name: 🚀 Publish to TestPyPI
@@ -62,5 +61,4 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.10.3
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           skip-existing: true
