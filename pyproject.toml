@@ -50,6 +50,7 @@ dev = [
   "cibuildwheel>=2.20",
   "pybind11-stubgen>=2.5",
   "twine>=5",
+  "types-pyyaml>=6.0"
 ]
 
 [tool.pytest.ini_options]

@@ -73,7 +73,7 @@ def select(items: Iterable[Dict[str, Any]], rule: _RuleLike) -> Iterator[Dict[st
     return (m for m in items if pred(m))
 
 
-def all_(*rules: Sequence[_RuleLike]) -> Rule:
+def all_(*rules: _RuleLike) -> Rule:
     """
     Functional AND: all_(r1, r2, ...) -> Rule with {"all":[...]}.
     Flattens nested ANDs when inputs are Rules already composed with AND.
@@ -89,7 +89,7 @@ def all_(*rules: Sequence[_RuleLike]) -> Rule:
     return Rule({"all": specs}) if specs else Rule({"all": []})
 
 
-def any_(*rules: Sequence[_RuleLike]) -> Rule:
+def any_(*rules: _RuleLike) -> Rule:
     """
     Functional OR: any_(r1, r2, ...) -> Rule with {"any":[...]}.
     Flattens nested ORs when inputs are Rules already composed with OR.
