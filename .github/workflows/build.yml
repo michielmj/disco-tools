@@ -1,44 +1,76 @@
 name: Build
+
 on:
-  push: { branches: [ main ], tags: [ "v*" ] }
-  pull_request: {}
-  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build-wheels:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix: { os: [ubuntu-22.04, macos-13, macos-14] }
+      matrix:
+        os:
+          - ubuntu-22.04
+          - macos-13
+          - macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: python -m pip install -U pip cibuildwheel build
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install -U pip cibuildwheel build
+
       - name: Build wheels
         env:
           CIBW_BUILD: "cp311-* cp312-* cp313-*"
           CIBW_SKIP: "*-cp314-*"
           CIBW_ARCHS_LINUX: "x86_64"
-          CIBW_ENVIRONMENT: 'PIP_ONLY_BINARY="numpy,pyarrow" PIP_PREFER_BINARY="1"'
-          CIBW_TEST_ENVIRONMENT: 'PIP_ONLY_BINARY="numpy,pyarrow" PIP_PREFER_BINARY="1"'
+          # Optional: pin manylinux image for better wheel availability
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
+          # Binary-only deps in build & test phases
+          CIBW_ENVIRONMENT: 'PIP_ONLY_BINARY="numpy" PIP_PREFER_BINARY="1"'
+          CIBW_TEST_ENVIRONMENT: 'PIP_ONLY_BINARY="numpy" PIP_PREFER_BINARY="1"'
           # --- Toggle pure-Python here:
           SKBUILD_CMAKE_ARGS: "-DBUILD_EXT=OFF"
         run: python -m cibuildwheel --output-dir wheelhouse
-      - uses: actions/upload-artifact@v4
-        with: { name: wheels-${{ matrix.os }}, path: wheelhouse/*.whl }
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
 
   build-sdist:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: python -m pip install -U build
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install -U build
+
       - name: Build sdist (pure Python or native, same command)
         env:
-          SKBUILD_CMAKE_ARGS: "-DBUILD_EXT=OFF"   # toggle here too if desired
+          # Keep sdist consistent with your wheel toggle if desired
+          SKBUILD_CMAKE_ARGS: "-DBUILD_EXT=OFF"
         run: python -m build --sdist
-      - uses: actions/upload-artifact@v4
-        with: { name: sdist, path: dist/*.tar.gz }
 
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
