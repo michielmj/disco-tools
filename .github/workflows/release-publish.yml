@@ -2,15 +2,8 @@ name: release-publish
 
 on:
   release:
-    types: [published]
-  workflow_dispatch: # manual run
-    inputs:
-      publish_target:
-        description: "Publish when run manually?"
-        required: true
-        default: "none"
-        type: choice
-        options: [ "none", "testpypi", "pypi" ]
+    types: [published]  # only when a GitHub Release is published
+  workflow_dispatch:
 
 jobs:
   build-and-publish:

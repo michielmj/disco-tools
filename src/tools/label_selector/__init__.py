@@ -47,7 +47,7 @@ _RuleLike = Union[Rule, Dict[str, Any]]
 
 
 def _to_rule(rule: _RuleLike) -> Rule:
-    return rule if isinstance(rule, Rule) else Rule(rule)  # type: ignore[arg-type]
+    return rule if isinstance(rule, Rule) else Rule(rule)
 
 
 def compile(rule: _RuleLike) -> Callable[[Dict[str, Any]], bool]:
