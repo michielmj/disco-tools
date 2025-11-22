@@ -21,8 +21,8 @@ Usage example:
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .core import Json, validate_primitive, validate_primitive_list  # type: ignore
-from .rule import Rule  # type: ignore
+from .core import Json, validate_primitive, validate_primitive_list
+from .rule import Rule
 
 
 @dataclass(frozen=True)

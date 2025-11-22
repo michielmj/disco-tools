@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Iterator
 import yaml
 
-from .core import Json, normalize, compile_node  # type: ignore
+from .core import Json, normalize, compile_node
 
 
 @dataclass(frozen=True)

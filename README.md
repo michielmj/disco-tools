@@ -25,12 +25,12 @@ Documentation for individual modules is available in the [`docs/`](docs) folder.
 
 ## ✨ Features
 
-- ⚙️ **Label Selector** — Fast rule engine for qualifying and filtering metadata  
+- ⚙️ **Label Selector** — Fast rule engine for qualifying and filtering metadata.  
   → [Read documentation ›](docs/label_selector.md)
 
-- 🗓️ **Scheduler Utilities** — Tools for time- and resource-based planning (coming soon)
-- 🧩 **Simulation Helpers** — Common components for distributed simulation (coming soon)
-- 🧮 **Data Utilities** — Lightweight statistical and transformation helpers (coming soon)
+- ⚙️ **Multi-Process Logging** — Safe, queue-based logging across worker processes using Python’s 
+- `QueueHandler` + `QueueListener`.  
+  → [Read documentation ›](docs/mp_logging.md)
 
 ---
 
