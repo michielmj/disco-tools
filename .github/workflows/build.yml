@@ -1,9 +1,8 @@
 name: Build (pure Python)
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
