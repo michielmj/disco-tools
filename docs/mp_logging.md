@@ -92,6 +92,29 @@ Prepare a worker process for safe logging.
 - Installs a `QueueHandler`
 - Removes other handlers unless explicitly kept
 
+The `level` parameter accepts two forms:
+
+| Form | Type | Effect |
+|------|------|--------|
+| Global level | `int` | Sets the root logger to that level (e.g. `logging.DEBUG`) |
+| Per-package list | `list[tuple[str, int]]` | Sets each `(package, level)` pair individually |
+
+An empty string `""` in a per-package list targets the root logger.  If no
+root entry is provided the root is set to `NOTSET` so per-package `DEBUG`
+settings are not silently filtered.
+
+```python
+# Global level — existing behaviour
+configure_worker(queue, level=logging.DEBUG)
+
+# Per-package levels
+configure_worker(queue, level=[
+    ("", logging.WARNING),      # root default: WARNING and above
+    ("disco", logging.DEBUG),   # verbose for disco package
+    ("urllib3", logging.ERROR), # quiet for urllib3
+])
+```
+
 ### `getLogger(name=None)`
 Thin wrapper around `logging.getLogger`.  
 Use exactly like the standard logging API.
@@ -157,10 +180,11 @@ Use mp_logging whenever you have:
 
 ## 🛠️ Best Practices
 
-- Configure logging **once** in the main process  
-- Workers should always call `configure_worker(queue)`  
-- Avoid heavy formatting in workers — let the listener handle it  
-- Use JSON or structured logging handlers on the main process for analytics pipelines  
+- Configure logging **once** in the main process
+- Workers should always call `configure_worker(queue)`
+- Avoid heavy formatting in workers — let the listener handle it
+- Use JSON or structured logging handlers on the main process for analytics pipelines
+- When using per-package levels, include a `("", level)` root entry to set an explicit default; omitting it leaves the root at `NOTSET` which passes everything through to the QueueHandler
 
 ---
 

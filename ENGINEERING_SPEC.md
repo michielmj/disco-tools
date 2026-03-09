@@ -105,15 +105,27 @@ docs/
 | Component | Description |
 |----------|-------------|
 | `setup_logging()` | Creates Queue + QueueListener in main process |
-| `configure_worker()` | Installs QueueHandler in worker processes |
+| `configure_worker()` | Installs QueueHandler in worker processes; supports global or per-package log levels |
 | `getLogger()` | Thin typed wrapper for stdlib logger |
+| `LevelConfig` | Type alias for the `level` parameter of `configure_worker` |
 | Convenience wrappers | `debug`, `info`, `warning`, `error`, `critical` |
+
+### `configure_worker` Level Configuration
+
+The `level` parameter of `configure_worker` accepts two forms:
+
+- **`int`** — sets the root logger globally (e.g. `logging.DEBUG`).
+- **`list[tuple[str, int]]`** — per-package configuration.  Each tuple is
+  `(package_name, level)`.  An empty string `""` targets the root logger.
+  If no root entry is provided, the root is set to `NOTSET` so per-package
+  fine-grained levels are not silently filtered before reaching the
+  QueueHandler.
 
 ### Usage Pattern
 
-**Main:**
+**Main — global level:**
 ```python
-from disco_tools.mp_logging import setup_logging, configure_worker
+from tools.mp_logging import setup_logging, configure_worker
 import multiprocessing as mp
 
 with setup_logging() as cfg:
@@ -125,6 +137,23 @@ with setup_logging() as cfg:
         pool.map(worker_fn, items)
 ```
 
+**Main — per-package levels:**
+```python
+level_cfg = [
+    ("", logging.WARNING),      # root default
+    ("disco", logging.DEBUG),   # verbose for disco
+    ("urllib3", logging.ERROR), # quiet for urllib3
+]
+
+with setup_logging() as cfg:
+    with mp.Pool(
+        processes=4,
+        initializer=configure_worker,
+        initargs=(cfg.queue, level_cfg)
+    ) as pool:
+        pool.map(worker_fn, items)
+```
+
 **Worker:**
 ```python
 logger = getLogger(__name__)
@@ -132,9 +161,10 @@ logger.info("worker started")
 ```
 
 ### Guarantees
-- Safe concurrent writes  
-- Deterministic ordering via QueueListener  
-- Works for ETL, simulation, pipelines  
+- Safe concurrent writes
+- Deterministic ordering via QueueListener
+- Works for ETL, simulation, pipelines
+- Per-package log verbosity configurable without coupling workers to handler setup
 
 ---
 
@@ -206,5 +236,5 @@ no_implicit_reexport = true
 
 ---
 
-**Last Updated:** 2025-11-22  
+**Last Updated:** 2026-03-09
 **Maintainer:** Michiel Jansen  
