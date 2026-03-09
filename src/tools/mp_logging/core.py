@@ -42,6 +42,30 @@ from typing import Any, Iterable, Iterator, Optional, TypeAlias, Union
 # NOTE: multiprocessing.Queue is not generic in typeshed (Py ≤ 3.12),
 # so we alias the concrete Queue type instead of using Queue[LogRecord].
 LogQueue: TypeAlias = MPQueue
+LevelConfig: TypeAlias = Union[int, list[tuple[str, int]]]
+
+
+def _apply_level_config(level: LevelConfig) -> None:
+    """Apply a LevelConfig to the current process's loggers.
+
+    - ``int``: sets the root logger level globally.
+    - ``list[tuple[str, int]]``: sets per-package levels.  An empty string
+      ``""`` targets the root logger.  If no root entry is provided the root
+      is set to ``NOTSET`` so per-package DEBUG settings are not filtered out
+      at the root before reaching any handlers.
+    """
+    if isinstance(level, int):
+        logging.getLogger().setLevel(level)
+    else:
+        root_level_set = False
+        for package, pkg_level in level:
+            if package == "":
+                logging.getLogger().setLevel(pkg_level)
+                root_level_set = True
+            else:
+                logging.getLogger(package).setLevel(pkg_level)
+        if not root_level_set:
+            logging.getLogger().setLevel(logging.NOTSET)
 
 
 @dataclass
@@ -64,7 +88,7 @@ class MPLoggingConfig:
 
 @contextlib.contextmanager
 def setup_logging(
-    level: int = logging.INFO,
+    level: LevelConfig = logging.INFO,
     handlers: Optional[Iterable[logging.Handler]] = None,
     queue: Optional[LogQueue] = None,
 ) -> Iterator[MPLoggingConfig]:
@@ -77,6 +101,24 @@ def setup_logging(
     - On exit, stops the listener cleanly.
 
     This is meant to be called once, in the main process.
+
+    Parameters
+    ----------
+    level:
+        Logging level configuration.  Two forms are accepted:
+
+        - ``int``: sets the root logger level globally, e.g. ``logging.INFO``.
+        - ``list[tuple[str, int]]``: per-package configuration.  Each tuple is
+          ``(package_name, level)``.  An empty string ``""`` targets the root
+          logger.  If no root entry is provided, the root is set to ``NOTSET``
+          so that per-package fine-grained levels are not filtered out.
+
+    handlers:
+        Handlers attached to the QueueListener in the main process.  Defaults
+        to a single StreamHandler with a standard formatter.
+    queue:
+        Supply an existing multiprocessing.Queue to reuse it.  A new queue is
+        created when this is ``None`` (the default).
     """
     if queue is None:
         log_queue: LogQueue = mp.Queue()
@@ -96,8 +138,7 @@ def setup_logging(
     else:
         resolved_handlers = handlers
 
-    root = logging.getLogger()
-    root.setLevel(level)
+    _apply_level_config(level)
 
     listener = logging.handlers.QueueListener(
         log_queue, *resolved_handlers, respect_handler_level=True
@@ -110,9 +151,6 @@ def setup_logging(
         yield cfg
     finally:
         listener.stop()
-
-
-LevelConfig: TypeAlias = Union[int, list[tuple[str, int]]]
 
 
 def configure_worker(
@@ -151,22 +189,7 @@ def configure_worker(
         to avoid duplicate logging. Set to True if you explicitly want
         extra handlers in the worker process.
     """
-    if isinstance(level, int):
-        logging.getLogger().setLevel(level)
-    else:
-        # Apply per-package levels; treat empty string as the root logger.
-        root_level_set = False
-        for package, pkg_level in level:
-            if package == "":
-                logging.getLogger().setLevel(pkg_level)
-                root_level_set = True
-            else:
-                logging.getLogger(package).setLevel(pkg_level)
-        # If no root-level entry was provided, ensure the root logger passes
-        # everything through so per-package DEBUG/etc. levels are not filtered
-        # out before reaching the QueueHandler.
-        if not root_level_set:
-            logging.getLogger().setLevel(logging.NOTSET)
+    _apply_level_config(level)
 
     root = logging.getLogger()
     if not keep_existing_handlers:

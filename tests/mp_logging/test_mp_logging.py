@@ -33,6 +33,33 @@ def _worker(queue: LogQueue, message: str) -> None:
     logger.info("worker: %s", message)
 
 
+def test_setup_logging_int_level() -> None:
+    """setup_logging with an int level sets the root logger globally."""
+    null = logging.NullHandler()
+    with setup_logging(level=logging.DEBUG, handlers=[null]):
+        assert logging.getLogger().level == logging.DEBUG
+
+
+def test_setup_logging_per_package_levels() -> None:
+    """setup_logging with a list sets per-package levels in the main process."""
+    null = logging.NullHandler()
+    level_config = [
+        ("", logging.WARNING),
+        ("disco", logging.DEBUG),
+    ]
+    with setup_logging(level=level_config, handlers=[null]):
+        assert logging.getLogger().level == logging.WARNING
+        assert logging.getLogger("disco").level == logging.DEBUG
+
+
+def test_setup_logging_per_package_no_root_entry() -> None:
+    """Without a root entry, root defaults to NOTSET (pass-through)."""
+    null = logging.NullHandler()
+    with setup_logging(level=[("disco", logging.DEBUG)], handlers=[null]):
+        assert logging.getLogger().level == logging.NOTSET
+        assert logging.getLogger("disco").level == logging.DEBUG
+
+
 def test_single_process_logging_compatibility() -> None:
     """getLogger should behave like logging.getLogger in single-process mode."""
     logger = getLogger(__name__)

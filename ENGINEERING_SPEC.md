@@ -104,15 +104,15 @@ docs/
 
 | Component | Description |
 |----------|-------------|
-| `setup_logging()` | Creates Queue + QueueListener in main process |
+| `setup_logging()` | Creates Queue + QueueListener in main process; supports global or per-package log levels |
 | `configure_worker()` | Installs QueueHandler in worker processes; supports global or per-package log levels |
 | `getLogger()` | Thin typed wrapper for stdlib logger |
 | `LevelConfig` | Type alias for the `level` parameter of `configure_worker` |
 | Convenience wrappers | `debug`, `info`, `warning`, `error`, `critical` |
 
-### `configure_worker` Level Configuration
+### Level Configuration
 
-The `level` parameter of `configure_worker` accepts two forms:
+Both `setup_logging` and `configure_worker` accept the same `level: LevelConfig` parameter in two forms:
 
 - **`int`** — sets the root logger globally (e.g. `logging.DEBUG`).
 - **`list[tuple[str, int]]`** — per-package configuration.  Each tuple is
@@ -128,7 +128,7 @@ The `level` parameter of `configure_worker` accepts two forms:
 from tools.mp_logging import setup_logging, configure_worker
 import multiprocessing as mp
 
-with setup_logging() as cfg:
+with setup_logging(level=logging.INFO) as cfg:
     with mp.Pool(
         processes=4,
         initializer=configure_worker,
@@ -137,7 +137,7 @@ with setup_logging() as cfg:
         pool.map(worker_fn, items)
 ```
 
-**Main — per-package levels:**
+**Main — per-package levels (same config applied to both main process and workers):**
 ```python
 level_cfg = [
     ("", logging.WARNING),      # root default
@@ -145,7 +145,7 @@ level_cfg = [
     ("urllib3", logging.ERROR), # quiet for urllib3
 ]
 
-with setup_logging() as cfg:
+with setup_logging(level=level_cfg) as cfg:
     with mp.Pool(
         processes=4,
         initializer=configure_worker,
