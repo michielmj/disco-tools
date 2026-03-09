@@ -14,6 +14,7 @@ Re-exports the main functions so callers can do:
 """
 
 from .core import (  # noqa: F401
+    LevelConfig,
     MPLoggingConfig,
     configure_worker,
     setup_logging,
@@ -27,6 +28,7 @@ from .core import (  # noqa: F401
 )
 
 __all__ = [
+    "LevelConfig",
     "MPLoggingConfig",
     "configure_worker",
     "setup_logging",

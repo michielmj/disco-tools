@@ -36,7 +36,7 @@ import logging.handlers
 import multiprocessing as mp
 from dataclasses import dataclass
 from multiprocessing.queues import Queue as MPQueue
-from typing import Any, Iterable, Iterator, Optional, TypeAlias
+from typing import Any, Iterable, Iterator, Optional, TypeAlias, Union
 
 
 # NOTE: multiprocessing.Queue is not generic in typeshed (Py ≤ 3.12),
@@ -112,9 +112,12 @@ def setup_logging(
         listener.stop()
 
 
+LevelConfig: TypeAlias = Union[int, list[tuple[str, int]]]
+
+
 def configure_worker(
     queue: LogQueue,
-    level: int = logging.INFO,
+    level: LevelConfig = logging.INFO,
     keep_existing_handlers: bool = False,
 ) -> None:
     """
@@ -130,15 +133,42 @@ def configure_worker(
     queue:
         The multiprocessing.Queue created in setup_logging.
     level:
-        Root logger level for this process (default: logging.INFO).
+        Logging level configuration. Two forms are accepted:
+
+        - ``int``: sets the root logger level globally, e.g. ``logging.DEBUG``.
+        - ``list[tuple[str, int]]``: a list of ``(package, level)`` pairs that
+          set per-package log levels.  An empty string ``""`` for the package
+          name sets the global (root) default.  Example::
+
+              configure_worker(queue, level=[
+                  ("", logging.WARNING),       # root default
+                  ("disco", logging.DEBUG),    # verbose for disco package
+                  ("urllib3", logging.ERROR),  # quiet for urllib3
+              ])
+
     keep_existing_handlers:
         If False (default), remove existing handlers from the root logger
         to avoid duplicate logging. Set to True if you explicitly want
         extra handlers in the worker process.
     """
-    root = logging.getLogger()
-    root.setLevel(level)
+    if isinstance(level, int):
+        logging.getLogger().setLevel(level)
+    else:
+        # Apply per-package levels; treat empty string as the root logger.
+        root_level_set = False
+        for package, pkg_level in level:
+            if package == "":
+                logging.getLogger().setLevel(pkg_level)
+                root_level_set = True
+            else:
+                logging.getLogger(package).setLevel(pkg_level)
+        # If no root-level entry was provided, ensure the root logger passes
+        # everything through so per-package DEBUG/etc. levels are not filtered
+        # out before reaching the QueueHandler.
+        if not root_level_set:
+            logging.getLogger().setLevel(logging.NOTSET)
 
+    root = logging.getLogger()
     if not keep_existing_handlers:
         root.handlers.clear()
 
