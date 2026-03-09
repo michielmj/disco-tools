@@ -35,19 +35,27 @@ When multiple worker processes write to the same file handler:
 ## 🔧 Quick Example
 
 ```python
+import logging
 import multiprocessing as mp
 from tools.mp_logging import setup_logging, configure_worker, getLogger
+
+# Per-package log level config — shared between main process and workers
+level_cfg = [
+    ("", logging.WARNING),      # root default
+    ("disco", logging.DEBUG),   # verbose for disco
+    ("urllib3", logging.ERROR), # quiet for urllib3
+]
 
 def worker(i: int) -> None:
     logger = getLogger(__name__)
     logger.info(f"Working on item {i}")
 
 if __name__ == "__main__":
-    with setup_logging() as cfg:
+    with setup_logging(level=level_cfg) as cfg:
         with mp.Pool(
             processes=4,
             initializer=configure_worker,
-            initargs=(cfg.queue,)
+            initargs=(cfg.queue, level_cfg)
         ) as pool:
             pool.map(worker, range(10))
 ```
@@ -85,6 +93,8 @@ Initialize the logging system in the **main process**.
 - Returns a `MPLoggingConfig` object with:
   - `queue`
   - `listener`
+
+The `level` parameter accepts the same two forms as `configure_worker` (see below): an `int` for a global root level, or a `list[tuple[str, int]]` for per-package configuration.
 
 ### `configure_worker(queue, level=logging.INFO, keep_existing_handlers=False)`
 Prepare a worker process for safe logging.
