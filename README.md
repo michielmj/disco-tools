@@ -1,6 +1,6 @@
 # 🧾 disco-tools
 
-**{{project_description}}**  
+**Common tools for disco simulation engine.**  
 
 [![PyPI](https://img.shields.io/pypi/v/disco-tools.svg)](https://pypi.org/project/disco-tools/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
