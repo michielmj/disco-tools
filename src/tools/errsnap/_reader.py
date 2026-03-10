@@ -34,8 +34,11 @@ class DumpFile:
     traceback:
         Full formatted traceback as a plain string.
     state:
-        The unpickled state object, or ``None`` if pickling failed during
-        capture (``meta.pickle_ok`` is ``False`` in that case).
+        The unpickled state object.  Any values that could not be pickled
+        during capture are replaced with :class:`~errsnap.PickleSkipped`
+        placeholders — inspect ``meta.skipped_paths`` to see which paths
+        were affected.  ``None`` only if a catastrophic pickling failure
+        occurred (``meta.pickle_ok is False`` and ``state.pkl`` absent).
     """
 
     __slots__ = ("path", "meta", "traceback", "state")
@@ -85,6 +88,11 @@ class DumpFile:
 
         if self.meta.pickle_ok:
             lines.append("  State      : pickled successfully  ✓")
+        elif self.meta.skipped_paths:
+            n = len(self.meta.skipped_paths)
+            lines.append(f"  State      : pickled ({n} path{'s' if n != 1 else ''} skipped)  ⚠")
+            for p in self.meta.skipped_paths:
+                lines.append(f"               • {p}")
         else:
             lines.append(f"  State      : pickle FAILED — {self.meta.pickle_error}")
 

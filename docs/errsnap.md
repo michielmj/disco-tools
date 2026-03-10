@@ -99,7 +99,8 @@ On normal exit: does nothing (`ctx.dump_path` remains `None`).
 |-----------|------|-------------|
 | `state` | `Any` | Object to snapshot. Use a `dict` or `list` to bundle multiple objects. |
 | `filename` | `str \| Path \| None` | Base path for the dump file. See [Filename Resolution](#-filename-resolution) below. |
-| `logger` | `logging.Logger \| None` | Optional logger. When provided, a `DEBUG` message is emitted after the dump is written. If pickling failed, a second `DEBUG` message is emitted. |
+| `logger` | `logging.Logger \| None` | Optional logger. When provided, a `DEBUG` message is emitted after the dump is written. If any values were skipped, a second `DEBUG` message is emitted. |
+| `max_depth` | `int` | Maximum recursion depth for container decomposition. Default `10`. See [Partial Serialization](#-partial-serialization-pickled-skipped-values) below. |
 
 The returned `CaptureContext` exposes one attribute:
 
@@ -220,7 +221,8 @@ if dump.meta.pickle_ok:
   Function   : run_partition
   Module     : my_worker
 ────────────────────────────────────────────────────────────────────────
-  State      : pickled successfully  ✓
+  State      : pickled (1 path skipped)  ⚠
+               • session
 ────────────────────────────────────────────────────────────────────────
   Traceback:
 
@@ -232,28 +234,101 @@ if dump.meta.pickle_ok:
 
 ---
 
-## 🛡️ Pickle Failure Handling
+## 🛡️ Partial Serialization — Pickled Skipped Values
 
-If `pickle.dumps(state)` raises (e.g. the state contains a lock, an open file
-handle, or a lambda), `errsnap`:
+`errsnap` uses **safe serialization** so that a single unpicklable value (e.g. a
+SQLAlchemy session buried inside a larger object) never prevents the rest of the
+state from being captured.
 
-- sets `meta.pickle_ok = False`
-- records the failure reason in `meta.pickle_error`
-- omits `state.pkl` from the archive
-- still writes the dump and re-raises the original exception
+### How it works
 
-At load time, `dump.state` is `None` when `meta.pickle_ok` is `False`.
+`safe_serialize` is applied recursively to the state object:
 
-If `state.pkl` is present in the archive but cannot be unpickled in the reading
-environment (e.g. a required class is no longer importable), `dump.state` is set
-to an `_UnpicklableState` placeholder instead of raising:
+1. **Fast path** — try `pickle.dumps(obj)` on the whole subtree first.  If it
+   succeeds, the value is stored as-is.
+2. **Container decomposition** — if the fast path fails and the object is a
+   `dict`, `list`, `tuple`, `set`, or `frozenset`, recurse into its elements and
+   repeat from step 1 for each one.
+3. **Leaf replacement** — if the object is not a known container type and cannot
+   be pickled, replace it with a `PickleSkipped` placeholder.
+
+Object attributes are **not** introspected. Attempting to reconstruct a
+partially-safe copy of an arbitrary object without its class cooperation would
+produce a broken, misleading object. `PickleSkipped` is more honest.
+
+### What you get in the dump
+
+```python
+state = {
+    "graph":   my_graph,           # → pickled normally          ✓
+    "params":  {"alpha": 0.9},     # → pickled normally          ✓
+    "session": db_session,         # → PickleSkipped(...)        ⚠
+}
+```
+
+After loading:
+
+```python
+dump = errsnap.load("my_worker_20250310T142301_001.errsnap")
+
+dump.state["graph"]             # your Graph object, fully restored
+dump.state["params"]            # {"alpha": 0.9}
+dump.state["session"]           # PickleSkipped instance
+
+print(dump.state["session"].type_name)   # "sqlalchemy.orm.session.Session"
+print(dump.state["session"].repr_str)    # truncated repr of the original
+print(dump.state["session"].reason)      # "TypeError: cannot pickle ..."
+
+print(dump.meta.skipped_paths)           # ["session"]
+print(dump.meta.pickle_ok)               # False (some values were skipped)
+```
+
+### `PickleSkipped`
+
+```python
+from tools.errsnap import PickleSkipped
+
+isinstance(dump.state["session"], PickleSkipped)  # True
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `type_name` | `str` | Fully qualified type, e.g. `"sqlalchemy.orm.session.Session"` |
+| `repr_str` | `str` | Truncated `repr()` of the original object (≤ 200 chars) |
+| `reason` | `str` | Error from the failing `pickle.dumps` call |
+
+### `DumpMeta.skipped_paths`
+
+`meta.skipped_paths` is a list of dot/bracket paths identifying every replaced
+value, e.g. `["session", "graph._cache[0]"]`.  It is empty when all values
+pickled cleanly, and `meta.pickle_ok` mirrors this: `True` iff `skipped_paths`
+is empty.
+
+### Controlling recursion depth
+
+The `max_depth` parameter (default `10`) caps how deep `safe_serialize` recurses
+into containers.  Subtrees at depth > `max_depth` are replaced wholesale rather
+than decomposed further, which prevents runaway recursion on deeply nested or
+self-referential structures.
+
+```python
+with capture(state, filename=__file__, max_depth=5):
+    heavy_computation()
+```
+
+### Load-time unpickling failure
+
+`state.pkl` is always written (it may contain `PickleSkipped` placeholders).
+If it cannot be unpickled in the *reading* environment (e.g. a required class is
+no longer importable), `dump.state` is set to an `_UnpicklableState` placeholder
+instead of raising:
 
 ```python
 from tools.errsnap._reader import _UnpicklableState
 
 if isinstance(dump.state, _UnpicklableState):
-    print(dump.state.reason)       # why unpickling failed
-    print(len(dump.state.raw_bytes))  # raw bytes available for manual recovery
+    print(dump.state.reason)          # why unpickling failed
+    print(len(dump.state.raw_bytes))  # raw bytes for manual recovery
 ```
 
 ---
@@ -340,7 +415,7 @@ tests/
 
 - Pass `filename=__file__` explicitly so dumps land predictably next to your source
 - Bundle multiple objects into a `dict` with descriptive keys — it makes offline inspection much easier
-- Check `meta.pickle_ok` before accessing `dump.state`
+- Check `meta.pickle_ok` and `meta.skipped_paths` to understand what was captured; `PickleSkipped` values in `dump.state` show type/repr of the originals
 - Treat `.errsnap` files as untrusted input — `pickle.loads` executes arbitrary code; only load dumps from known-safe sources
 - Add `*.errsnap` to `.gitignore` to avoid accidentally committing large dump files
 

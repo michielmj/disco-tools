@@ -22,7 +22,8 @@ from typing import Any
 import pytest
 
 import tools.errsnap as errsnap
-from tools.errsnap import CaptureContext, DumpFile, DumpMeta
+from tools.errsnap import CaptureContext, DumpFile, DumpMeta, PickleSkipped
+from tools.errsnap._serialize import safe_serialize
 from tools.errsnap._reader import _UnpicklableState
 from tools.errsnap._writer import _make_unique_path, _resolve_stem
 
@@ -205,25 +206,147 @@ def test_capture_sequence_numbers_are_ascending(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_capture_unpicklable_state_sets_pickle_ok_false(tmp_path: Path) -> None:
-    ctx = _capture_exc(lambda: None, tmp_path)  # lambdas are not picklable
+    # A lambda is replaced by PickleSkipped; pickle_ok=False, skipped_paths non-empty.
+    ctx = _capture_exc(lambda: None, tmp_path)
     dump = _load_from(ctx)
     assert dump.meta.pickle_ok is False
-    assert dump.meta.pickle_error is not None
+    assert dump.meta.skipped_paths  # at least one path skipped
+    assert dump.meta.pickle_error is None  # not a catastrophic failure
 
 
-def test_capture_unpicklable_state_omits_state_pkl(tmp_path: Path) -> None:
+def test_capture_unpicklable_state_writes_state_pkl(tmp_path: Path) -> None:
+    # safe_serialize always writes state.pkl (with PickleSkipped placeholders).
     ctx = _capture_exc(lambda: None, tmp_path)
     assert ctx.dump_path is not None
     with zipfile.ZipFile(ctx.dump_path) as zf:
-        assert "state.pkl" not in zf.namelist()
+        assert "state.pkl" in zf.namelist()
 
 
-def test_capture_unpicklable_state_yields_none_on_load(tmp_path: Path) -> None:
+def test_capture_unpicklable_state_yields_pickle_skipped_on_load(tmp_path: Path) -> None:
+    # The root value is replaced with a PickleSkipped placeholder.
     ctx = _capture_exc(lambda: None, tmp_path)
     dump = _load_from(ctx)
-    assert dump.state is None
+    assert isinstance(dump.state, PickleSkipped)
+    assert "function" in dump.state.type_name
 
 
+
+
+
+# ===========================================================================
+# safe_serialize
+# ===========================================================================
+
+def test_safe_serialize_picklable_object_unchanged() -> None:
+    data = {"x": 1, "y": [2, 3]}
+    state_bytes, skipped = safe_serialize(data)
+    assert skipped == []
+    assert pickle.loads(state_bytes) == data  # noqa: S301
+
+
+def test_safe_serialize_unpicklable_root_replaced() -> None:
+    state_bytes, skipped = safe_serialize(lambda: None)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert isinstance(result, PickleSkipped)
+    assert skipped == ["<root>"]
+
+
+def test_safe_serialize_unpicklable_dict_value_replaced() -> None:
+    data = {"good": 42, "bad": lambda: None}
+    state_bytes, skipped = safe_serialize(data)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert result["good"] == 42
+    assert isinstance(result["bad"], PickleSkipped)
+    assert skipped == ["bad"]
+
+
+def test_safe_serialize_nested_unpicklable_replaced() -> None:
+    data = {"outer": {"inner": lambda: None, "ok": 99}}
+    state_bytes, skipped = safe_serialize(data)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert result["outer"]["ok"] == 99
+    assert isinstance(result["outer"]["inner"], PickleSkipped)
+    assert skipped == ["outer.inner"]
+
+
+def test_safe_serialize_list_element_replaced() -> None:
+    data = [1, lambda: None, 3]
+    state_bytes, skipped = safe_serialize(data)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert result[0] == 1
+    assert isinstance(result[1], PickleSkipped)
+    assert result[2] == 3
+    assert skipped == ["[1]"]
+
+
+def test_safe_serialize_tuple_preserved() -> None:
+    data = (1, 2, 3)
+    state_bytes, skipped = safe_serialize(data)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert result == (1, 2, 3)
+    assert skipped == []
+
+
+def test_safe_serialize_tuple_with_bad_element() -> None:
+    data = (1, lambda: None)
+    state_bytes, skipped = safe_serialize(data)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert isinstance(result, tuple)
+    assert result[0] == 1
+    assert isinstance(result[1], PickleSkipped)
+
+
+def test_safe_serialize_pickle_skipped_has_type_name() -> None:
+    state_bytes, _ = safe_serialize(lambda: None)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert "function" in result.type_name
+
+
+def test_safe_serialize_pickle_skipped_has_reason() -> None:
+    state_bytes, _ = safe_serialize(lambda: None)
+    result = pickle.loads(state_bytes)  # noqa: S301
+    assert result.reason  # non-empty
+
+
+def test_safe_serialize_max_depth_respected(tmp_path: Path) -> None:
+    # Build a deeply nested dict; with max_depth=2 the innermost value
+    # is skipped rather than recursed into.
+    data: Any = {"a": {"b": {"c": lambda: None}}}
+    _, skipped_deep = safe_serialize(data, max_depth=10)
+    _, skipped_shallow = safe_serialize(data, max_depth=1)
+    # Deep: reaches the lambda and skips it at "a.b.c"
+    assert "a.b.c" in skipped_deep
+    # Shallow: stops at depth 1, skips "a.b" entirely (depth limit)
+    assert any("a.b" in p for p in skipped_shallow)
+
+
+def test_safe_serialize_multiple_skipped_paths() -> None:
+    data = {"a": lambda: None, "b": lambda: None, "c": 42}
+    _, skipped = safe_serialize(data)
+    assert sorted(skipped) == ["a", "b"]
+
+
+def test_capture_partial_state_preserved(tmp_path: Path) -> None:
+    # When a dict contains a mix of good and bad values, the good values
+    # are fully preserved in the dump.
+    state = {"safe": {"nested": [1, 2, 3]}, "unsafe": lambda: None}
+    ctx = _capture_exc(state, tmp_path)
+    dump = _load_from(ctx)
+    assert dump.state["safe"] == {"nested": [1, 2, 3]}
+    assert isinstance(dump.state["unsafe"], PickleSkipped)
+
+
+def test_capture_skipped_paths_in_meta(tmp_path: Path) -> None:
+    state = {"a": 1, "b": lambda: None}
+    ctx = _capture_exc(state, tmp_path)
+    dump = _load_from(ctx)
+    assert dump.meta.skipped_paths == ["b"]
+
+
+def test_capture_skipped_paths_empty_for_clean_state(tmp_path: Path) -> None:
+    ctx = _capture_exc({"x": 1}, tmp_path)
+    dump = _load_from(ctx)
+    assert dump.meta.skipped_paths == []
 
 
 # ===========================================================================

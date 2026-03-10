@@ -6,7 +6,7 @@ Shared data structures.
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -35,6 +35,12 @@ class DumpMeta:
         ``True`` if ``state`` was successfully pickled into ``state.pkl``.
     pickle_error:
         Human-readable reason why pickling failed, or ``None`` if it succeeded.
+        With safe serialization this is only set for a catastrophic failure;
+        partial skips are reported in *skipped_paths* instead.
+    skipped_paths:
+        Dot / bracket paths of values that could not be pickled and were
+        replaced with ``PickleSkipped`` placeholders, e.g.
+        ``["session", "params[2]"]``.  Empty when nothing was skipped.
     errsnap_version:
         Version tag for forward-compatibility of the dump format.
     """
@@ -48,6 +54,7 @@ class DumpMeta:
     timestamp: str
     pickle_ok: bool
     pickle_error: str | None = None
+    skipped_paths: list[str] = field(default_factory=list)
     errsnap_version: str = "1"
 
     # ------------------------------------------------------------------
@@ -72,6 +79,7 @@ class DumpMeta:
             "timestamp": self.timestamp,
             "pickle_ok": self.pickle_ok,
             "pickle_error": self.pickle_error,
+            "skipped_paths": self.skipped_paths,
         }
 
     @classmethod
@@ -87,5 +95,6 @@ class DumpMeta:
             timestamp=d["timestamp"],
             pickle_ok=d["pickle_ok"],
             pickle_error=d.get("pickle_error"),
+            skipped_paths=d.get("skipped_paths", []),
             errsnap_version=d.get("errsnap_version", "1"),
         )
