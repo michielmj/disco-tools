@@ -3,7 +3,7 @@
 **Common tools for disco simulation engine.**  
 
 [![PyPI](https://img.shields.io/pypi/v/disco-tools.svg)](https://pypi.org/project/disco-tools/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/michielmj/disco-tools/actions/workflows/build.yml/badge.svg)](https://github.com/michielmj/disco-tools/actions)
 [![Tests](https://github.com/michielmj/disco-tools/actions/workflows/test.yml/badge.svg)](https://github.com/michielmj/disco-tools/actions)
 
@@ -28,9 +28,13 @@ Documentation for individual modules is available in the [`docs/`](docs) folder.
 - ⚙️ **Label Selector** — Fast rule engine for qualifying and filtering metadata.  
   → [Read documentation ›](docs/label_selector.md)
 
-- ⚙️ **Multi-Process Logging** — Safe, queue-based logging across worker processes using Python’s 
-- `QueueHandler` + `QueueListener`.  
+- ⚙️ **Multi-Process Logging** — Safe, queue-based logging across worker processes using Python's
+  `QueueHandler` + `QueueListener`.  
   → [Read documentation ›](docs/mp_logging.md)
+
+- 🪤 **errsnap** — Capture full post-mortem exception snapshots — including arbitrary runtime
+  state — to a self-contained `.errsnap` file for offline inspection.  
+  → [Read documentation ›](docs/errsnap.md)
 
 ---
 
@@ -62,8 +66,11 @@ pytest -q
 
 ## 📚 Documentation
 
-- [Label Selector](docs/label_selector.md) — fast, composable rule engine for key–value metadata  
-- Additional module docs will be added under the [`docs/`](docs) directory as the toolkit evolves.
+- [Label Selector](docs/label_selector.md) — fast, composable rule engine for key–value metadata
+- [Multi-Process Logging](docs/mp_logging.md) — process-safe logging via queue-based architecture
+- [errsnap](docs/errsnap.md) — post-mortem exception snapshots with state capture
+
+Additional module docs will be added under the [`docs/`](docs) directory as the toolkit evolves.
 
 ---
 
@@ -83,4 +90,4 @@ if qualifies(meta, rule):
 
 ## 🧾 License
 
-MIT License © 2025 — part of the **disco-tools** project.
+Apache 2.0 License © 2025 — part of the **disco-tools** project.
