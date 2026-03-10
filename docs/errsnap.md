@@ -37,11 +37,26 @@ stored next to your source file, ready to open in a notebook or debugger.
 ## 🔧 Quick Example
 
 ```python
+import logging
 from tools.errsnap import capture
 
+logger = logging.getLogger(__name__)
+
 def run_partition(graph, params):
-    with capture({"graph": graph, "params": params}, filename=__file__):
+    with capture({"graph": graph, "params": params}, filename=__file__, logger=logger):
         _do_heavy_work(graph, params)
+```
+
+If `_do_heavy_work` raises, a message like the following is emitted at `DEBUG` level:
+
+```
+errsnap: dump written to /cwd/run_partition_20250310T142301_001.errsnap (KeyError: 'missing_node')
+```
+
+If the state dict contained an unpicklable object, a second line follows:
+
+```
+errsnap: state could not be pickled — state.pkl omitted from /cwd/run_partition_20250310T142301_001.errsnap
 ```
 
 If `_do_heavy_work` raises, a file such as
@@ -84,6 +99,7 @@ On normal exit: does nothing (`ctx.dump_path` remains `None`).
 |-----------|------|-------------|
 | `state` | `Any` | Object to snapshot. Use a `dict` or `list` to bundle multiple objects. |
 | `filename` | `str \| Path \| None` | Base path for the dump file. See [Filename Resolution](#-filename-resolution) below. |
+| `logger` | `logging.Logger \| None` | Optional logger. When provided, a `DEBUG` message is emitted after the dump is written. If pickling failed, a second `DEBUG` message is emitted. |
 
 The returned `CaptureContext` exposes one attribute:
 
@@ -150,9 +166,9 @@ The `filename` argument controls where the dump file is written and what stem it
 
 | Value passed | Behaviour |
 |---|---|
-| Omitted / `None` | Stem and directory derived from the caller's `__file__` via `inspect.stack()` |
-| A path ending in `.py` (e.g. `__file__`) | `.py` suffix stripped; parent directory used |
-| Any other string or `Path` | Used as the base path directly |
+| Omitted / `None` | Stem derived from the caller's `__file__` via `inspect.stack()`; dump written to **cwd** |
+| A path ending in `.py` (e.g. `__file__`) | `.py` suffix stripped; dump written to **cwd** |
+| Any other string or `Path` | Full path used as-is; directory component respected (defaults to cwd if bare name) |
 
 All dump files follow the pattern:
 
@@ -279,12 +295,24 @@ with capture({"graph": graph, "experiment": exp, "epoch": epoch}):
     heavy_computation(graph, exp)
 ```
 
-**Filename omitted — dump lands next to the calling module automatically:**
+**Filename omitted — dump always lands in the current working directory:**
 ```python
 # In src/disco/workers/partition_worker.py
 with capture(worker_state):
     run_partition(assignment)
-# Writes: src/disco/workers/partition_worker_20250310T142301_001.errsnap
+# Writes to cwd: ./partition_worker_20250310T142301_001.errsnap
+
+# Passing __file__ behaves the same — only the stem is used, directory is cwd:
+with capture(worker_state, filename=__file__):
+    run_partition(assignment)
+# Writes to cwd: ./partition_worker_20250310T142301_001.errsnap
+```
+
+**Custom output directory — pass a full path:**
+```python
+with capture(worker_state, filename="/var/log/disco/partition_worker"):
+    run_partition(assignment)
+# Writes: /var/log/disco/partition_worker_20250310T142301_001.errsnap
 ```
 
 ---
