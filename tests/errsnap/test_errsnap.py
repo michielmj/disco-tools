@@ -13,6 +13,7 @@ No test classes are used.
 from __future__ import annotations
 
 import io
+import logging
 import pickle
 import zipfile
 from pathlib import Path
@@ -59,9 +60,10 @@ def _load_from(ctx: CaptureContext) -> DumpFile:
 # ===========================================================================
 
 def test_resolve_stem_strips_py_suffix(tmp_path: Path) -> None:
+    # A .py path (e.g. __file__) keeps only the stem; directory is always cwd.
     directory, stem = _resolve_stem(tmp_path / "mymodule.py", stack_depth=1)
     assert stem == "mymodule"
-    assert directory == tmp_path
+    assert directory == Path.cwd()
 
 
 def test_resolve_stem_plain_path_kept_as_is(tmp_path: Path) -> None:
@@ -173,17 +175,18 @@ def test_capture_state_roundtrips_via_pickle(tmp_path: Path) -> None:
     assert recovered == state
 
 
-def test_capture_filename_dunder_file_strips_py(tmp_path: Path) -> None:
-    fake_file = str(tmp_path / "mymodule.py")
-    ctx = _capture_exc(None, tmp_path, stem="irrelevant")
-    # Redo with explicit __file__-style path
+def test_capture_filename_dunder_file_strips_py() -> None:
+    # Passing a .py path (e.g. __file__) uses only the stem; dump goes to cwd.
+    import tempfile, os
+    fake_file = "/some/deep/path/mymodule.py"
     ctx2 = errsnap.capture(None, filename=fake_file)
     with pytest.raises(ValueError):
         with ctx2:
             raise ValueError("x")
     assert ctx2.dump_path is not None
-    assert ctx2.dump_path.parent == tmp_path
+    assert ctx2.dump_path.parent == Path.cwd()
     assert ctx2.dump_path.name.startswith("mymodule_")
+    ctx2.dump_path.unlink(missing_ok=True)  # clean up from cwd
 
 
 def test_capture_consecutive_dumps_have_unique_paths(tmp_path: Path) -> None:
@@ -220,6 +223,101 @@ def test_capture_unpicklable_state_yields_none_on_load(tmp_path: Path) -> None:
     dump = _load_from(ctx)
     assert dump.state is None
 
+
+
+
+# ===========================================================================
+# Logger integration
+# ===========================================================================
+
+def _make_logger() -> tuple[logging.Logger, list[str]]:
+    """Return a logger and a list that collects its DEBUG messages."""
+    messages: list[str] = []
+    logger = logging.getLogger(f"errsnap_test_{id(messages)}")
+    logger.setLevel(logging.DEBUG)
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    logger.addHandler(_Collector())
+    logger.propagate = False
+    return logger, messages
+
+
+def test_logger_no_message_without_exception(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t", logger=logger)
+    with ctx:
+        pass  # no exception
+    assert messages == []
+
+
+def test_logger_emits_debug_on_exception(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert len(messages) == 1
+    assert "errsnap" in messages[0]
+    assert "dump written" in messages[0]
+
+
+def test_logger_message_contains_dump_path(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert ctx.dump_path is not None
+    assert str(ctx.dump_path) in messages[0]
+
+
+def test_logger_message_contains_exception_type(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert "ValueError" in messages[0]
+
+
+def test_logger_no_extra_message_for_picklable_state(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert len(messages) == 1  # only the "dump written" line
+
+
+def test_logger_extra_message_for_unpicklable_state(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture(lambda: None, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert len(messages) == 2
+    assert "pickle" in messages[1].lower()
+
+
+def test_logger_pickle_message_contains_dump_path(tmp_path: Path) -> None:
+    logger, messages = _make_logger()
+    ctx = errsnap.capture(lambda: None, filename=tmp_path / "t", logger=logger)
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert ctx.dump_path is not None
+    assert str(ctx.dump_path) in messages[1]
+
+
+def test_no_logger_still_works(tmp_path: Path) -> None:
+    """Omitting logger= must not change behaviour."""
+    ctx = errsnap.capture({"x": 1}, filename=tmp_path / "t")
+    with pytest.raises(ValueError):
+        with ctx:
+            raise ValueError("oops")
+    assert ctx.dump_path is not None
 
 # ===========================================================================
 # DumpMeta content

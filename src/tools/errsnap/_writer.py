@@ -14,6 +14,7 @@ import pickle
 import traceback
 import zipfile
 from pathlib import Path
+from typing import Tuple
 from types import TracebackType
 from typing import Any
 
@@ -41,11 +42,13 @@ def _resolve_stem(filename: str | os.PathLike[str] | None, stack_depth: int) -> 
 
     Rules
     -----
-    - If *filename* is ``None``, walk up the call stack past the ``errsnap``
-      package frames to find the caller's ``__file__`` and use its stem.
-    - If *filename* ends with ``.py``, strip that suffix (the caller passed
-      ``__file__`` directly).
-    - Otherwise use *filename* as-is.
+    - If *filename* is ``None``, derive the stem from the caller's ``__file__``
+      via the call stack and write to the **current working directory**.
+    - If *filename* ends with ``.py`` (the caller passed ``__file__`` directly),
+      use only the stem and write to the **current working directory**.
+    - Otherwise treat *filename* as an explicit path: the stem is the final
+      component and the directory is the parent (defaulting to cwd when no
+      parent directory is specified).
     """
     if filename is None:
         # Climb the stack to find the first frame outside this package.
@@ -55,19 +58,17 @@ def _resolve_stem(filename: str | os.PathLike[str] | None, stack_depth: int) -> 
             if caller_file and "<" not in caller_file:
                 caller_path = Path(caller_file).resolve()
                 if pkg_dir not in caller_path.parents:
-                    stem = caller_path.stem          # strips .py automatically
-                    directory = caller_path.parent
-                    return directory, stem
-        # Ultimate fallback: current working directory, generic name.
+                    return Path.cwd(), caller_path.stem
+        # Ultimate fallback.
         return Path.cwd(), "errsnap_dump"
 
     path = Path(filename)
-    # Strip .py if the caller passed __file__
+    # Strip .py if the caller passed __file__ — dump goes to cwd.
     if path.suffix.lower() == ".py":
-        stem = path.stem
-    else:
-        stem = path.stem if path.suffix == _EXTENSION else path.name
+        return Path.cwd(), path.stem
 
+    # Explicit path: honour the directory component if one was given.
+    stem = path.stem if path.suffix == _EXTENSION else path.name
     directory = path.parent if path.parent != Path(".") else Path.cwd()
     return directory, stem
 
@@ -100,7 +101,7 @@ def write_dump(
     tb: TracebackType,
     filename: str | os.PathLike[str] | None,
     caller_frame: inspect.FrameInfo | None,
-) -> Path:
+) -> tuple[Path, bool]:
     """Write a ``.errsnap`` zip archive and return the path.
 
     Parameters
@@ -171,4 +172,4 @@ def write_dump(
         if state_bytes is not None:
             zf.writestr(_STATE_ENTRY, state_bytes)
 
-    return dump_path
+    return dump_path, pickle_ok

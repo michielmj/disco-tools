@@ -6,6 +6,7 @@ errsnap._capture
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 from pathlib import Path
 from types import TracebackType
@@ -30,10 +31,13 @@ class CaptureContext:
 
         - ``None`` — derive the stem from the caller's source file via
           ``inspect.stack()``.
-        - A ``__file__``-style path ending in ``.py`` — the ``.py`` suffix is
-          stripped and the directory is used as the dump location.
-        - Any other string / ``Path`` — used as the base name (directory
-          component is respected; suffix may be omitted).
+        - A ``__file__``-style path ending in ``.py`` — only the stem is used;
+          the dump is written to the current working directory.
+        - Any other string / ``Path`` — used as the explicit base path.
+    logger:
+        Optional :class:`logging.Logger`.  When provided, a ``DEBUG`` message
+        is emitted after the dump is written, and a second ``DEBUG`` message
+        is emitted if the state could not be pickled.
 
     Attributes
     ----------
@@ -42,15 +46,17 @@ class CaptureContext:
         ``None`` if no exception occurred or before the context exits.
     """
 
-    __slots__ = ("_state", "_filename", "_caller_frame", "dump_path")
+    __slots__ = ("_state", "_filename", "_logger", "_caller_frame", "dump_path")
 
     def __init__(
         self,
         state: Any,
         filename: str | os.PathLike[str] | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._state = state
         self._filename = filename
+        self._logger = logger
         # Capture the frame of the *caller* of capture() right away so we
         # have accurate location metadata even if the stack is unwound later.
         self._caller_frame: inspect.FrameInfo | None = None
@@ -87,7 +93,7 @@ class CaptureContext:
         assert exc_val is not None
         assert tb is not None
 
-        self.dump_path = write_dump(
+        self.dump_path, pickle_ok = write_dump(
             state=self._state,
             exc=exc_val,
             exc_type=exc_type,
@@ -95,6 +101,19 @@ class CaptureContext:
             filename=self._filename,
             caller_frame=self._caller_frame,
         )
+
+        if self._logger is not None:
+            self._logger.debug(
+                "errsnap: dump written to %s (%s: %s)",
+                self.dump_path,
+                exc_type.__qualname__,
+                exc_val,
+            )
+            if not pickle_ok:
+                self._logger.debug(
+                    "errsnap: state could not be pickled — state.pkl omitted from %s",
+                    self.dump_path,
+                )
 
         # Always re-raise.
         return False
@@ -104,6 +123,7 @@ def capture(
     state: Any,
     *,
     filename: str | os.PathLike[str] | None = None,
+    logger: logging.Logger | None = None,
 ) -> CaptureContext:
     """Return a context manager that dumps *state* to a ``.errsnap`` file on exception.
 
@@ -122,10 +142,14 @@ def capture(
         Arbitrary object to snapshot.  Use a ``dict`` or ``list`` to bundle
         multiple objects together.
     filename:
-        Base path for the dump file.  Pass ``__file__`` from your module to
-        place the dump next to your source file (the ``.py`` suffix is stripped
-        automatically).  If omitted, ``errsnap`` resolves the caller's source
-        file via ``inspect.stack()``.
+        Base path for the dump file.  Pass ``__file__`` to use the calling
+        module's name; the ``.py`` suffix is stripped automatically and the
+        dump is written to the current working directory.  If omitted,
+        ``errsnap`` resolves the caller's source file via ``inspect.stack()``.
+    logger:
+        Optional :class:`logging.Logger`.  When provided, a ``DEBUG`` message
+        is emitted reporting the dump path after it is written.  If the state
+        could not be pickled, a second ``DEBUG`` message is emitted.
 
     Returns
     -------
@@ -133,4 +157,4 @@ def capture(
         A context manager.  After an exception, ``ctx.dump_path`` holds the
         ``Path`` of the written dump file.
     """
-    return CaptureContext(state=state, filename=filename)
+    return CaptureContext(state=state, filename=filename, logger=logger)
