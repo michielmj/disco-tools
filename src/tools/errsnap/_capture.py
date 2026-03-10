@@ -57,7 +57,11 @@ class CaptureContext:
     ) -> None:
         self._state = state
         self._filename = filename
-        self._logger = logger
+        if logger is None:
+            import logging
+            self._logger = logging.getLogger(__name__)
+        else:
+            self._logger = logger
         self._max_depth = max_depth
         # Capture the frame of the *caller* of capture() right away so we
         # have accurate location metadata even if the stack is unwound later.
