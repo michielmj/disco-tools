@@ -46,17 +46,19 @@ class CaptureContext:
         ``None`` if no exception occurred or before the context exits.
     """
 
-    __slots__ = ("_state", "_filename", "_logger", "_caller_frame", "dump_path")
+    __slots__ = ("_state", "_filename", "_logger", "_max_depth", "_caller_frame", "dump_path")
 
     def __init__(
         self,
         state: Any,
         filename: str | os.PathLike[str] | None = None,
         logger: logging.Logger | None = None,
+        max_depth: int = 10,
     ) -> None:
         self._state = state
         self._filename = filename
         self._logger = logger
+        self._max_depth = max_depth
         # Capture the frame of the *caller* of capture() right away so we
         # have accurate location metadata even if the stack is unwound later.
         self._caller_frame: inspect.FrameInfo | None = None
@@ -93,13 +95,14 @@ class CaptureContext:
         assert exc_val is not None
         assert tb is not None
 
-        self.dump_path, pickle_ok = write_dump(
+        self.dump_path, pickle_ok, skipped_paths = write_dump(
             state=self._state,
             exc=exc_val,
             exc_type=exc_type,
             tb=tb,
             filename=self._filename,
             caller_frame=self._caller_frame,
+            max_depth=self._max_depth,
         )
 
         if self._logger is not None:
@@ -110,9 +113,15 @@ class CaptureContext:
                 exc_val,
             )
             if not pickle_ok:
+                n = len(skipped_paths)
                 self._logger.debug(
-                    "errsnap: state could not be pickled — state.pkl omitted from %s",
+                    "errsnap: %d path%s could not be pickled and %s replaced"
+                    " with PickleSkipped in %s: %s",
+                    n,
+                    "s" if n != 1 else "",
+                    "were" if n != 1 else "was",
                     self.dump_path,
+                    ", ".join(skipped_paths) or "(catastrophic failure)",
                 )
 
         # Always re-raise.
@@ -124,6 +133,7 @@ def capture(
     *,
     filename: str | os.PathLike[str] | None = None,
     logger: logging.Logger | None = None,
+    max_depth: int = 10,
 ) -> CaptureContext:
     """Return a context manager that dumps *state* to a ``.errsnap`` file on exception.
 
@@ -148,8 +158,13 @@ def capture(
         ``errsnap`` resolves the caller's source file via ``inspect.stack()``.
     logger:
         Optional :class:`logging.Logger`.  When provided, a ``DEBUG`` message
-        is emitted reporting the dump path after it is written.  If the state
-        could not be pickled, a second ``DEBUG`` message is emitted.
+        is emitted reporting the dump path after it is written.  If any
+        values were skipped during serialization, a second ``DEBUG`` message
+        is emitted.
+    max_depth:
+        Maximum recursion depth when decomposing containers to find
+        picklable sub-values.  Objects beyond this depth are replaced with
+        a :class:`~errsnap.PickleSkipped` placeholder.  Default is ``10``.
 
     Returns
     -------
@@ -157,4 +172,4 @@ def capture(
         A context manager.  After an exception, ``ctx.dump_path`` holds the
         ``Path`` of the written dump file.
     """
-    return CaptureContext(state=state, filename=filename, logger=logger)
+    return CaptureContext(state=state, filename=filename, logger=logger, max_depth=max_depth)

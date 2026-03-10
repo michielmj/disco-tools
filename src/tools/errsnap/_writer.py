@@ -10,14 +10,13 @@ import glob
 import inspect
 import json
 import os
-import pickle
 import traceback
 import zipfile
 from pathlib import Path
-from typing import Tuple
 from types import TracebackType
 from typing import Any
 
+from ._serialize import safe_serialize
 from ._types import DumpMeta
 
 # ---------------------------------------------------------------------------
@@ -101,7 +100,8 @@ def write_dump(
     tb: TracebackType,
     filename: str | os.PathLike[str] | None,
     caller_frame: inspect.FrameInfo | None,
-) -> tuple[Path, bool]:
+    max_depth: int = 10,
+) -> tuple[Path, bool, list[str]]:
     """Write a ``.errsnap`` zip archive and return the path.
 
     Parameters
@@ -142,13 +142,14 @@ def write_dump(
     tb_lines = traceback.format_exception(exc_type, exc, tb)
     tb_text = "".join(tb_lines)
 
-    # --- pickle state ----------------------------------------------------
-    pickle_ok = True
-    pickle_error: str | None = None
+    # --- pickle state (safe: replaces unpicklable subtrees) ---------------
+    skipped: list[str] = []
     state_bytes: bytes | None = None
+    pickle_error: str | None = None
     try:
-        state_bytes = pickle.dumps(state)
-    except Exception as pickle_exc:  # noqa: BLE001
+        state_bytes, skipped = safe_serialize(state, max_depth=max_depth)
+        pickle_ok = len(skipped) == 0
+    except Exception as pickle_exc:  # noqa: BLE001 — catastrophic failure
         pickle_ok = False
         pickle_error = f"{type(pickle_exc).__name__}: {pickle_exc}"
 
@@ -163,6 +164,7 @@ def write_dump(
         timestamp=iso,
         pickle_ok=pickle_ok,
         pickle_error=pickle_error,
+        skipped_paths=skipped,
     )
 
     # --- write zip -------------------------------------------------------
@@ -172,4 +174,4 @@ def write_dump(
         if state_bytes is not None:
             zf.writestr(_STATE_ENTRY, state_bytes)
 
-    return dump_path, pickle_ok
+    return dump_path, pickle_ok, skipped

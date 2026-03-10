@@ -24,10 +24,12 @@ Public API
 - :func:`load` — load a ``.errsnap`` file into a :class:`DumpFile`.
 - :class:`DumpFile` — loaded dump with ``meta``, ``traceback``, and ``state``.
 - :class:`DumpMeta` — frozen dataclass with exception and location metadata.
+- :class:`PickleSkipped` — placeholder for values that could not be pickled.
 """
 
 from ._capture import CaptureContext, capture
 from ._reader import DumpFile, load
+from ._serialize import PickleSkipped
 from ._types import DumpMeta
 
 __all__ = [
@@ -36,4 +38,5 @@ __all__ = [
     "CaptureContext",
     "DumpFile",
     "DumpMeta",
+    "PickleSkipped",
 ]
