@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import multiprocessing as mp
 import time
-from typing import List
 
 from tools.mp_logging import (
     LevelConfig,
@@ -18,7 +17,7 @@ from tools.mp_logging.core import LogQueue
 class ListHandler(logging.Handler):
     """Simple handler that collects log records in a list."""
 
-    def __init__(self, storage: List[logging.LogRecord]) -> None:
+    def __init__(self, storage: list[logging.LogRecord]) -> None:
         super().__init__()
         self._storage = storage
 
@@ -72,7 +71,7 @@ def test_single_process_logging_compatibility() -> None:
 
 def test_multiprocess_logging_collects_records() -> None:
     """Logs from multiple processes should be collected via the queue listener."""
-    records: List[logging.LogRecord] = []
+    records: list[logging.LogRecord] = []
     handler = ListHandler(records)
 
     messages = ["alpha", "beta", "gamma"]
@@ -108,7 +107,7 @@ def _worker_with_level(
 
 def test_configure_worker_int_level() -> None:
     """An int level sets the root logger globally."""
-    records: List[logging.LogRecord] = []
+    records: list[logging.LogRecord] = []
     handler = ListHandler(records)
 
     with setup_logging(level=logging.DEBUG, handlers=[handler]) as cfg:
@@ -132,7 +131,7 @@ def test_configure_worker_int_level() -> None:
 
 def test_configure_worker_per_package_levels() -> None:
     """A list of (package, level) tuples sets levels per package."""
-    records: List[logging.LogRecord] = []
+    records: list[logging.LogRecord] = []
     handler = ListHandler(records)
 
     level_config = [
@@ -161,7 +160,7 @@ def test_configure_worker_per_package_levels() -> None:
 
 def test_configure_worker_per_package_no_root_entry() -> None:
     """Without a root entry, the root level defaults to NOTSET (pass-through)."""
-    records: List[logging.LogRecord] = []
+    records: list[logging.LogRecord] = []
     handler = ListHandler(records)
 
     # Only set disco to DEBUG; no root entry.

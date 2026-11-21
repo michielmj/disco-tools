@@ -10,7 +10,7 @@ Provides composable, high-performance building blocks for label selection, sched
 **Owner:** Michiel Jansen  
 **Repository:** https://github.com/michielmj/disco-tools  
 **License:** MIT  
-**Programming Language:** Python ≥ 3.11  
+**Programming Language:** Python ≥ 3.13  
 **Core Dependency Stack:** `numpy`, `pyyaml`
 
 ---
@@ -204,7 +204,7 @@ can inspect offline.
 
 ### Design Principles
 
-- Standard-library only (no runtime dependencies beyond Python ≥ 3.11)
+- Standard-library only (no runtime dependencies beyond Python ≥ 3.13)
 - Single opaque state object — callers bundle multiple objects into a `dict` or
   `list` themselves; `errsnap` does not impose structure on the captured state
 - Exception is **always re-raised** — `errsnap` never swallows exceptions

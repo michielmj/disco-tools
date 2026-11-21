@@ -21,7 +21,8 @@ Typical usage:
     {'env': 'prod', 'version': 12}
 """
 
-from typing import Any, Callable, Dict, Iterable, Iterator, Sequence, Union
+from typing import Any
+from collections.abc import Callable, Iterable, Iterator, Sequence
 
 from .label import Label
 from .rule import Rule
@@ -43,14 +44,14 @@ __all__ = [
 
 __version__ = "0.1.0"
 
-_RuleLike = Union[Rule, Dict[str, Any]]
+type _RuleLike = Rule | dict[str, Any]
 
 
 def _to_rule(rule: _RuleLike) -> Rule:
     return rule if isinstance(rule, Rule) else Rule(rule)
 
 
-def compile(rule: _RuleLike) -> Callable[[Dict[str, Any]], bool]:
+def compile(rule: _RuleLike) -> Callable[[dict[str, Any]], bool]:
     """
     Compile a Rule or raw spec dict into a fast predicate(meta)->bool.
     Note: For hot paths, compile once and reuse the returned callable.
@@ -59,12 +60,12 @@ def compile(rule: _RuleLike) -> Callable[[Dict[str, Any]], bool]:
     return _compile_node(_normalize(r.to_dict()))
 
 
-def qualifies(meta: Dict[str, Any], rule: _RuleLike) -> bool:
+def qualifies(meta: dict[str, Any], rule: _RuleLike) -> bool:
     """Return True if `meta` satisfies `rule`, else False."""
     return compile(rule)(meta)
 
 
-def select(items: Iterable[Dict[str, Any]], rule: _RuleLike) -> Iterator[Dict[str, Any]]:
+def select(items: Iterable[dict[str, Any]], rule: _RuleLike) -> Iterator[dict[str, Any]]:
     """
     Lazily yield items from `items` that satisfy `rule`.
     Equivalent to `r.select(items)` but accepts a raw dict too.

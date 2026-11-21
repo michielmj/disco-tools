@@ -21,10 +21,11 @@ Example (internal use):
     >>> pred({"env": "prod"})
     True
 """
-from typing import Any, Callable, Dict, Iterable, List, Union
+from typing import Any
+from collections.abc import Callable, Iterable
 
-Json = Dict[str, Any]
-Primitive = Union[None, bool, int, float, str]
+type Json = dict[str, Any]
+type Primitive = None | bool | int | float | str
 _MISSING = object()
 
 __all__ = [
@@ -46,7 +47,7 @@ def validate_primitive(value: Any, context: str = "value") -> Primitive:
     raise TypeError(f"{context} must be a JSON primitive (str, int, float, bool, None), not {type(value).__name__}")
 
 
-def validate_primitive_list(values: Iterable[Any], context: str = "values") -> List[Primitive]:
+def validate_primitive_list(values: Iterable[Any], context: str = "values") -> list[Primitive]:
     return [validate_primitive(v, f"{context} element") for v in values]
 
 
@@ -93,7 +94,7 @@ def normalize(node: Json) -> Json:
 
 # ---------- Compiler (fast, short-circuit) ----------
 
-def compile_node(node: Json) -> Callable[[Dict[str, Any]], bool]:
+def compile_node(node: Json) -> Callable[[dict[str, Any]], bool]:
     if "all" in node:
         preds = [compile_node(n) for n in node["all"]]
 

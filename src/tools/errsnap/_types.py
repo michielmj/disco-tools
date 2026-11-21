@@ -83,7 +83,7 @@ class DumpMeta:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "DumpMeta":
+    def from_dict(cls, d: dict[str, Any]) -> DumpMeta:
         """Reconstruct from a plain dict (as loaded from ``meta.json``)."""
         return cls(
             exc_type=d["exc_type"],

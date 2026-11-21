@@ -24,7 +24,8 @@ Typical usage:
     True
 """
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, Iterator
+from typing import Any
+from collections.abc import Callable, Iterable, Iterator
 import yaml
 
 from .core import Json, normalize, compile_node
@@ -70,10 +71,10 @@ class Rule:
         return cls(yaml.safe_load(s))
 
     # Execution
-    def compile(self) -> Callable[[Dict[str, Any]], bool]:
+    def compile(self) -> Callable[[dict[str, Any]], bool]:
         return compile_node(normalize(self.spec))
 
     # Lazy selection (iterator)
-    def select(self, items: Iterable[Dict[str, Any]]) -> Iterator[Dict[str, Any]]:
+    def select(self, items: Iterable[dict[str, Any]]) -> Iterator[dict[str, Any]]:
         pred = self.compile()
         return (m for m in items if pred(m))
