@@ -19,7 +19,8 @@ Usage example:
     {'match': {'key': 'env', 'op': 'eq', 'value': 'prod'}}
 """
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from .core import Json, validate_primitive, validate_primitive_list
 from .rule import Rule

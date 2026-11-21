@@ -36,13 +36,14 @@ import logging.handlers
 import multiprocessing as mp
 from dataclasses import dataclass
 from multiprocessing.queues import Queue as MPQueue
-from typing import Any, Iterable, Iterator, Optional, TypeAlias, Union
+from typing import Any
+from collections.abc import Iterable, Iterator
 
 
-# NOTE: multiprocessing.Queue is not generic in typeshed (Py ≤ 3.12),
-# so we alias the concrete Queue type instead of using Queue[LogRecord].
-LogQueue: TypeAlias = MPQueue
-LevelConfig: TypeAlias = Union[int, list[tuple[str, int]]]
+# NOTE: we alias the concrete multiprocessing Queue type instead of using
+# Queue[LogRecord].
+type LogQueue = MPQueue
+type LevelConfig = int | list[tuple[str, int]]
 
 
 def _apply_level_config(level: LevelConfig) -> None:
@@ -89,8 +90,8 @@ class MPLoggingConfig:
 @contextlib.contextmanager
 def setup_logging(
     level: LevelConfig = logging.INFO,
-    handlers: Optional[Iterable[logging.Handler]] = None,
-    queue: Optional[LogQueue] = None,
+    handlers: Iterable[logging.Handler] | None = None,
+    queue: LogQueue | None = None,
 ) -> Iterator[MPLoggingConfig]:
     """
     Configure logging for the main process using a QueueListener.
@@ -202,7 +203,7 @@ def configure_worker(
 # --- API-compatible helpers -------------------------------------------------
 
 
-def getLogger(name: Optional[str] = None) -> logging.Logger:
+def getLogger(name: str | None = None) -> logging.Logger:
     """
     Thin wrapper around logging.getLogger.
 

@@ -68,7 +68,7 @@ class CaptureContext:
         self._caller_frame: inspect.FrameInfo | None = None
         self.dump_path: Path | None = None
 
-    def __enter__(self) -> "CaptureContext":
+    def __enter__(self) -> CaptureContext:
         # Walk up two frames: __enter__ → capture() → actual caller
         stack = inspect.stack()
         # stack[0] = __enter__, stack[1] = capture() or direct __enter__ call

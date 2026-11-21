@@ -120,7 +120,7 @@ def write_dump(
         The ``inspect.FrameInfo`` for the ``capture()`` call site (used for
         location metadata).  If ``None``, location fields will be empty.
     """
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     ts = now.strftime("%Y%m%dT%H%M%S")
     iso = now.isoformat()
 
